@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Maze Game with Live Score</title>
+  <style>
+    body {
+      background: #545151;
+      color: #fff;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 30px;
+    }
+
+    #maze {
+      display: grid;
+      margin: 20px auto;
+      border: 3px solid hsl(0, 15%, 88%);
+    }
+
+    .cell {
+      width: 20px;
+      height: 20px;
+      box-sizing: border-box;
+    }
+
+    .wall {
+      background-color: #000000;
+    }
+
+    .path {
+      background-color: #eee;
+    }
+
+    .player {
+      background-color: #00f;
+    }
+
+    .goal {
+      background-color: #0f0;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: #0af;
+      border: none;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    #score-display {
+      margin-top: 10px;
+      font-size: 18px;
+    }
+
+    #status-bar {
+      display: flex;
+      gap: 20px;
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Maze Game (25x25)</h1>
+  <div id="status-bar">
+    <div id="time">⏱ Time: 0s</div>
+    <div id="wrong">❌ Wrong Turns: 0</div>
+    <div id="score">🧮 Score: 1000</div>
+  </div>
+  <div id="maze"></div>
+  <div id="score-display">Score: --</div>
+  <button onclick="generateMaze()">New Maze</button>
+
+  <script>
+    const rows = 25;
+    const cols = 25;
+    let maze = [];
+    let playerPos = { x: 0, y: 0 };
+    let goalPos = { x: cols - 1, y: rows - 1 };
+    let startTime = null;
+    let interval = null;
+    let wrongTurns = 0;
+    let moveHistory = [];
+    let gameEnded = false;
+
+    function generateEmptyMaze() {
+      maze = Array.from({ length: rows }, () => Array(cols).fill(1));
+    }
+
+    function generateMazeGrid() {
+      generateEmptyMaze();
+
+      const stack = [];
+      let current = { x: 0, y: 0 };
+      maze[current.y][current.x] = 0;
+      stack.push(current);
+
+      const dirs = [
+        { x: 0, y: -2 },
+        { x: 2, y: 0 },
+        { x: 0, y: 2 },
+        { x: -2, y: 0 },
+      ];
+
+      while (stack.length) {
+        const current = stack[stack.length - 1];
+        const neighbors = [];
+
+        for (const dir of dirs) {
+          const nx = current.x + dir.x;
+          const ny = current.y + dir.y;
+
+          if (
+            nx >= 0 && ny >= 0 && nx < cols && ny < rows &&
+            maze[ny][nx] === 1
+          ) {
+            neighbors.push({ x: nx, y: ny, dir });
+          }
+        }
+
+        if (neighbors.length) {
+          const { x, y, dir } = neighbors[Math.floor(Math.random() * neighbors.length)];
+          maze[y - dir.y / 2][x - dir.x / 2] = 0;
+          maze[y][x] = 0;
+          stack.push({ x, y });
+        } else {
+          stack.pop();
+        }
+      }
+
+      // Reset all tracking
+      playerPos = { x: 0, y: 0 };
+      goalPos = { x: cols - 1, y: rows - 1 };
+      moveHistory = [{ x: 0, y: 0 }];
+      wrongTurns = 0;
+      startTime = null;
+      gameEnded = false;
+      document.getElementById("score-display").textContent = "Score: --";
+      updateStatusBar(0, 0, 1000);
+
+      if (interval) clearInterval(interval);
+    }
+
+    function renderMaze() {
+      const mazeEl = document.getElementById('maze');
+      mazeEl.innerHTML = '';
+      mazeEl.style.gridTemplateColumns = `repeat(${cols}, 20px)`;
+
+      for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          if (x === playerPos.x && y === playerPos.y) {
+            cell.classList.add('player');
+          } else if (x === goalPos.x && y === goalPos.y) {
+            cell.classList.add('goal');
+          } else if (maze[y][x] === 1) {
+            cell.classList.add('wall');
+          } else {
+            cell.classList.add('path');
+          }
+          mazeEl.appendChild(cell);
+        }
+      }
+    }
+
+    function updateStatusBar(seconds, wrongs, score) {
+      document.getElementById("time").textContent = `⏱ Time: ${seconds}s`;
+      document.getElementById("wrong").textContent = `❌ Wrong Turns: ${wrongs}`;
+      document.getElementById("score").textContent = `🧮 Score: ${score}`;
+    }
+
+    function calculateScore(seconds, wrongs) {
+      return Math.max(0, 1000 - (seconds * 10) - (wrongs * 5));
+    }
+
+    function movePlayer(dx, dy) {
+      if (gameEnded) return;
+
+      const newX = playerPos.x + dx;
+      const newY = playerPos.y + dy;
+
+      if (
+        newX >= 0 && newY >= 0 &&
+        newX < cols && newY < rows &&
+        maze[newY][newX] === 0
+      ) {
+        if (!startTime) {
+          startTime = Date.now();
+          interval = setInterval(() => {
+            const seconds = Math.floor((Date.now() - startTime) / 1000);
+            const score = calculateScore(seconds, wrongTurns);
+            updateStatusBar(seconds, wrongTurns, score);
+          }, 1000);
+        }
+
+        const alreadyVisited = moveHistory.some(m => m.x === newX && m.y === newY);
+        if (alreadyVisited) {
+          wrongTurns++;
+        }
+
+        playerPos = { x: newX, y: newY };
+        moveHistory.push({ x: newX, y: newY });
+        renderMaze();
+
+        if (playerPos.x === goalPos.x && playerPos.y === goalPos.y) {
+          const totalTime = Math.floor((Date.now() - startTime) / 1000);
+          const finalScore = calculateScore(totalTime, wrongTurns);
+          clearInterval(interval);
+          updateStatusBar(totalTime, wrongTurns, finalScore);
+          gameEnded = true;
+          document.getElementById("score-display").textContent =
+            `🎉 Finished in ${totalTime}s | ❌ ${wrongTurns} wrong turns | 🧮 Final Score: ${finalScore}`;
+        }
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      switch (e.key) {
+        case 'ArrowUp': movePlayer(0, -1); break;
+        case 'ArrowDown': movePlayer(0, 1); break;
+        case 'ArrowLeft': movePlayer(-1, 0); break;
+        case 'ArrowRight': movePlayer(1, 0); break;
+      }
+    });
+
+    function generateMaze() {
+      generateMazeGrid();
+      renderMaze();
+    }
+
+    generateMaze();
+  </script>
+</body>
+</html>
